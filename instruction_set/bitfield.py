@@ -32,7 +32,7 @@ class BitField(object):
         self.from_bit = from_bit
         self.to_bit = to_bit
         self.mask = 0
-        for i in range(self.to_bit - self.from_bit):
+        for i in range(self.to_bit - self.from_bit + 1):
             self.mask = (self.mask << 1) | 1
 
     def extract(self, word: int) -> int:
@@ -43,4 +43,15 @@ class BitField(object):
         """
         word = word >> self.from_bit
         word = word & self.mask
+        return word
+
+    def insert(self, value: int, word: int) -> int:
+        """Insert value, which should be in the low order
+        bits and no larger than the bitfield, into the
+        bitfield, which should be zero before insertion.
+        Returns the combined value.
+        Example: BitField(3,5).insert(0b101, 0b110) == 0b101110
+        """
+        value = value << self.from_bit
+        word = word | value
         return word
