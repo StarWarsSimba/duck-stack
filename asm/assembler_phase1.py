@@ -292,6 +292,31 @@ def transform(lines: list[str]) -> list[int]:
     return transformed
 
 
+def resolve(lines: list[str]) -> dict[str, int]:
+    """
+    Build table associating labels in the source code
+    with addresses.
+    """
+    labels: dict[str, int] = { }
+    address = 0
+    for lnum in range(len(lines)):
+        line = lines[lnum].rstrip()
+        log.debug(f"Processing line {lnum}: {line}")
+        try:
+            fields = parse_line(line)
+            if "label" in fields:
+                log.debug(f"Label {fields['label']} in field {fields}")
+                labels[fields["label"]] = address
+            if fields["kind"] != AsmSrcKind.COMMENT:
+                log.debug(f"Incrementing address to {address + 1}")
+                address += 1
+        except Exception as e:
+            log.debug(f"Exception encountered line {lnum}: {e}")
+            # Just ignore errors here; they will be handled in
+            # transform
+    return labels
+
+
 def cli() -> object:
     """Get arguments from command line"""
     parser = argparse.ArgumentParser(description="Duck Machine Assembler (phase 1)")
