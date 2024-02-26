@@ -119,6 +119,11 @@ class AsmSrcKind(Enum):
     FULL = auto()
     # A data location, not an instruction
     DATA = auto()
+    # An instruction that refers to a memory
+    # location in place of its source and offset
+    # parts.
+    MEMOP = auto()
+    JUMP = auto()
 
 
 # Lines that contain only a comment (and possibly a label).
@@ -189,6 +194,41 @@ ASM_DATA_PAT = re.compile(r"""
    \s*$             
    """, re.VERBOSE)
 
+ASM_MEMOP_PAT = re.compile(r"""
+   \s*
+   # Optional label 
+   (
+     (?P<label> [a-zA-Z]\w*):
+   )?
+   \s*
+    # The instruction proper 
+    (?P<opcode>    [a-zA-Z]+)           # Opcode
+    (/ (?P<predicate> [A-Z]+) )?   # Predicate (optional)
+    \s+
+    (?P<target>    r[0-9]+),            # Target register
+    (?P<labelref> [a-zA-Z]\w*)
+   # Optional comment follows # or ; 
+   (
+     \s*
+     (?P<comment>[\#;].*)
+   )?       
+   \s*$             
+   """, re.VERBOSE)
+
+ASM_JUMP_PAT = re.compile(r""" 
+   # The instruction proper  
+   \s*
+    (?P<opcode>    JUMP)           # Opcode
+    (/ (?P<predicate> [A-Z]+) )?   # Predicate (optional)
+   \s*
+    (?P<labelref> [a-zA-Z]\w*)
+    # Optional comment follows # or ; 
+   (
+     \s*
+     (?P<comment>[\#;].*)
+   )?       
+   \s*$             
+   """, re.VERBOSE)
 
 # We will try each pattern in turn.  The PATTERNS table
 # is to associate each pattern with the kind of instruction
@@ -196,7 +236,9 @@ ASM_DATA_PAT = re.compile(r"""
 #
 PATTERNS = [(ASM_FULL_PAT, AsmSrcKind.FULL),
             (ASM_DATA_PAT, AsmSrcKind.DATA),
-            (ASM_COMMENT_PAT, AsmSrcKind.COMMENT)
+            (ASM_COMMENT_PAT, AsmSrcKind.COMMENT),
+            (ASM_MEMOP_PAT, AsmSrcKind.MEMOP),
+            (ASM_JUMP_PAT, AsmSrcKind.JUMP)
             ]
 
 def parse_line(line: str) -> dict:
@@ -243,7 +285,7 @@ def to_flag(m: str) -> CondFlag:
     return composite
 
 
-def transform(lines: list[str]) -> list[int]:
+def transform(lines: list[str]) -> list[str]:
     """
     Transform some assembly language lines, leaving others
     unchanged.
@@ -261,9 +303,11 @@ def transform(lines: list[str]) -> list[int]:
                 ADD   r15,r0,r15[-2]
                 HALT r0,r0,r0
        x:       DATA 0
-     """
+    """
+    labels = resolve(lines)
     error_count = 0
     transformed = [ ]
+    address = 0
     for lnum in range(len(lines)):
         line = lines[lnum].rstrip()
         log.debug(f"Processing line {lnum}: {line}")
@@ -272,11 +316,33 @@ def transform(lines: list[str]) -> list[int]:
             if fields["kind"] == AsmSrcKind.FULL:
                 log.debug("Passing through FULL instruction")
                 transformed.append(line)
-            elif fields["kind"] == AsmSrcKind.DATA:
-                word = value_parse(fields["value"])
-                transformed.append(word)
+            elif fields["kind"] == AsmSrcKind.MEMOP:
+                fix_optional_fields(fields)
+                ref = fields["labelref"]
+                mem_addr = labels[ref]
+                pc_relative = mem_addr - address
+                f = fields
+                full = (f"{f['label']}   {f['opcode']}{f['predicate']} " +
+                        f" {f['target']},r0,r15[{pc_relative}] #{ref} " +
+                        f" {f['comment']}")
+                transformed.append(full)
+            elif fields["kind"] == AsmSrcKind.JUMP: # ADD/P r15,r0,r15[3] #r1bigger
+                print("JUMP")
+                print(fields)
+                fix_optional_fields(fields)
+                ref = fields["labelref"]
+                mem_addr = labels[ref]
+                pc_relative = mem_addr - address
+                f = fields
+                full = (f"ADD{f['predicate']} " +
+                        f" r15,r0,r15[{pc_relative}] #{ref} " +
+                        f" {f['comment']}")
+                transformed.append(full)
             else:
                 transformed.append(line)
+            if fields["kind"] != AsmSrcKind.COMMENT:
+                log.debug(f"Incrementing address to {address + 1}")
+                address += 1
         except SyntaxError as e:
             error_count += 1
             print(f"Syntax error in line {lnum}: {line}", file=sys.stderr)
@@ -290,6 +356,24 @@ def transform(lines: list[str]) -> list[int]:
             print("Too many errors; abandoning", file=sys.stderr)
             sys.exit(1)
     return transformed
+
+
+def fix_optional_fields(fields: dict[str, str]):
+    """Fill in values of optional fields label,
+    predicate, and comment, adding the punctuation
+    they require.
+    """
+    if "label" in fields:
+        if fields["label"] is None:
+            fields["label"] = "    "
+        else:
+            fields["label"] = fields["label"] + ":"
+    if fields["predicate"] is None:
+        fields["predicate"] = ""
+    else:
+        fields["predicate"] = "/" + fields["predicate"]
+    if fields["comment"] is None:
+        fields["comment"] = ""
 
 
 def resolve(lines: list[str]) -> dict[str, int]:
