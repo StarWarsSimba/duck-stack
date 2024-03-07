@@ -2,11 +2,15 @@
 Originally for a calculator, expanded for a compiler.
 """
 
+import context
+from compiler.codegen_context import Context
+
 # Global variable NO_VALUE is defined below after IntConst
 
 # One global environment (scope) for
 # the calculator
 ENV = dict()
+
 
 def env_clear():
     """Clear all variables in calculator memory"""
@@ -18,6 +22,7 @@ class UndefinedVariable(Exception):
     """Raised when expression tries to use a variable that
     is not in ENV
     """
+
     pass
 
 
@@ -36,14 +41,25 @@ class Expr(object):
         """Implementations of __repr__ should return a string that looks like
         the constructor, e.g., Plus(IntConst(5), IntConst(4))
         """
-        raise NotImplementedError(f"Class {self.__class__.__name__} doesn't define __repr__")
+        raise NotImplementedError(
+            f"Class {self.__class__.__name__} doesn't define __repr__"
+        )
 
     def __eq__(self, other: "Expr") -> bool:
         raise NotImplementedError("__eq__ method not defined for class")
 
+    def gen(self, context: Context, target: str):
+        """Generate code into the context object.
+        Result of expression evaluation will be
+        left in target register.
+        """
+        raise NotImplementedError(
+            f"gen method not defined for class {self.__class__.__name__}"
+        )
 
 
 class IntConst(Expr):
+
     def __init__(self, value: int):
         self.value = value
 
@@ -58,6 +74,15 @@ class IntConst(Expr):
 
     def __eq__(self, other: Expr):
         return isinstance(other, IntConst) and self.value == other.eval().value
+
+    def gen(self, context: Context, target: str):
+        """Generate code into the context object.
+        Result of expression evaluation will be
+        left in target register.
+        """
+        label = context.get_const_symbol(self.value)
+        context.add_line(f"    LOAD {target},{label}")
+        return
 
 
 # Globals should normally go at the beginning of the file, but we needed
@@ -78,7 +103,6 @@ class BinOp(Expr):
         right_val = self.right.eval()
         return IntConst(self._apply(left_val.value, right_val.value))
 
-
     def __str__(self) -> str:
         """Implementations of __str__ should return the expression in algebraic notation"""
         return f"({str(self.left)} {self.opsym} {str(self.right)})"
@@ -90,13 +114,17 @@ class BinOp(Expr):
         return f"{self.__class__.__name__}({repr(self.left)}, {repr(self.right)})"
 
     def __eq__(self, other: "Expr") -> bool:
-        return type(self) == type(other) and  \
-            self.left == other.left and \
-            self.right == other.right
+        return (
+            type(self) == type(other)
+            and self.left == other.left
+            and self.right == other.right
+        )
 
     def _opcode(self) -> str:
         """Which operation code do we use in the generated assembly code?"""
-        raise NotImplementedError("Each binary operator should define the _opcode method")
+        raise NotImplementedError(
+            "Each binary operator should define the _opcode method"
+        )
 
 
 class Plus(BinOp):
@@ -165,8 +193,8 @@ class UnOp(Expr):
         return f"{self.__class__.__name__}({repr(self.left)})"
 
     def __eq__(self, other: "Expr") -> bool:
-        return type(self) == type(other) and  \
-            self.left == other.left
+        return type(self) == type(other) and self.left == other.left
+
 
 class Neg(UnOp):
     """~left"""
@@ -211,6 +239,19 @@ class Var(Expr):
     def assign(self, value: IntConst):
         ENV[self.name] = value
 
+    def lvalue(self, context: Context) -> str:
+        """Return the label that the compiler will use for this variable"""
+        return context.get_var_symbol(self.name)
+
+    def gen(self, context: Context, target: str):
+        """Generate code into the context object.
+        Result of expression evaluation will be
+        left in target register.
+        """
+        label = context.get_var_symbol(self.name)
+        context.add_line(f"    LOAD {target},{label}")
+        return
+
 
 class Assign(Expr):
     """Assignment:  x = E represented as Assign(x, E)"""
@@ -231,6 +272,12 @@ class Assign(Expr):
         self.left.assign(r_val)
         return r_val
 
+    def gen(self, context: Context, target: str):
+        """Store value of expression into variable"""
+        loc = self.left.lvalue(context)
+        self.right.gen(context, target)
+        context.add_line(f"   STORE  {target},{loc}")
+
 
 class Control(Expr):
     """Control flow nodes (while, if, ...).
@@ -241,6 +288,7 @@ class Control(Expr):
     in Python and 'void' in C or C++), so we return 0
     from eval.
     """
+
     pass
     # Note PyCharm will complain that Control doesn't implement all
     # abstract methods, but that's because Control is itself an
@@ -252,7 +300,7 @@ class Seq(Control):
     """exp ; exp"""
 
     def __init__(self, left, right):
-        """ exp ; exp """
+        """exp ; exp"""
         self.left = left
         self.right = right
 
@@ -322,6 +370,7 @@ class Comparison(Control):
     conditions, because it is jumping to the 'else' branch
     or out of the loop.)
     """
+
     def __init__(self, left: Expr, right: Expr):
         self.left = left
         self.right = right
@@ -334,9 +383,11 @@ class Comparison(Control):
         return f"{self.__class__.__name__}({repr(self.left)}, {repr(self.right)})"
 
     def __eq__(self, other: "Expr") -> bool:
-        return type(self) == type(other) and  \
-            self.left == other.left and \
-            self.right == other.right
+        return (
+            type(self) == type(other)
+            and self.left == other.left
+            and self.right == other.right
+        )
 
     def eval(self) -> "IntConst":
         """In the interpreter, relations return 0 or 1.
@@ -353,11 +404,13 @@ class EQ(Comparison):
     def _apply(self, left: int, right: int) -> int:
         return 1 if left == right else 0
 
+
 class NE(Comparison):
     """left != right"""
 
     def _apply(self, left: int, right: int) -> int:
         return 1 if left != right else 0
+
 
 class GT(Comparison):
     """left > right"""
@@ -365,16 +418,19 @@ class GT(Comparison):
     def _apply(self, left: int, right: int) -> int:
         return 1 if left > right else 0
 
+
 class GE(Comparison):
     """left >= right"""
 
     def _apply(self, left: int, right: int) -> int:
         return 1 if left >= right else 0
 
+
 class LT(Comparison):
 
     def _apply(self, left: int, right: int) -> int:
         return 1 if left < right else 0
+
 
 class LE(Comparison):
 
@@ -408,6 +464,7 @@ class While(Control):
             cond_val = self.cond.eval()
         return last
 
+
 class Pass(Control):
     """
     The 'else' part of an 'if' statement is optional.  This node
@@ -439,19 +496,18 @@ class If(Control):
         self.elsepart = elsepart
 
     def __str__(self):
-        return "if {} then\n{}\nelse\n{}\nfi".format(self.cond, self.thenpart, self.elsepart)
+        return "if {} then\n{}\nelse\n{}\nfi".format(
+            self.cond, self.thenpart, self.elsepart
+        )
 
     def __repr__(self):
         return f"If({repr((self.cond))}, {repr(self.thenpart)}, {repr(self.elsepart)})"
 
     def eval(self) -> IntConst:
-        """If statement.  Returns nothing. """
+        """If statement.  Returns nothing."""
         cond_value = self.cond.eval()
         if cond_value.value != 0:
             result = self.thenpart.eval()
         else:
             result = self.elsepart.eval()
         return result
-
-
-
