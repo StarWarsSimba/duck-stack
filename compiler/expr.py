@@ -126,6 +126,13 @@ class BinOp(Expr):
             "Each binary operator should define the _opcode method"
         )
 
+    def gen(self, context: Context, target: str):
+        self.left.gen(context, target)
+        reg = context.allocate_register()
+        self.right.gen(context, reg)
+        context.add_line(f"   {self._opcode()}  {target},{target},{reg}")
+        context.free_register(reg)
+
 
 class Plus(BinOp):
     """left + right"""
@@ -136,6 +143,9 @@ class Plus(BinOp):
 
     def _apply(self, left: int, right: int) -> int:
         return left + right
+
+    def _opcode(self) -> str:
+        return "ADD"
 
 
 class Minus(BinOp):
@@ -148,6 +158,9 @@ class Minus(BinOp):
     def _apply(self, left: int, right: int) -> int:
         return left - right
 
+    def _opcode(self) -> str:
+        return "SUB"
+
 
 class Times(BinOp):
     """left * right"""
@@ -159,6 +172,9 @@ class Times(BinOp):
     def _apply(self, left: int, right: int) -> int:
         return left * right
 
+    def _opcode(self) -> str:
+        return "MUL"
+
 
 class Div(BinOp):
     """left // right"""
@@ -169,6 +185,9 @@ class Div(BinOp):
 
     def _apply(self, left: int, right: int) -> int:
         return left // right
+
+    def _opcode(self) -> str:
+        return "DIV"
 
 
 class UnOp(Expr):
@@ -315,6 +334,10 @@ class Seq(Control):
         discard = self.left.eval()
         return self.right.eval()
 
+    def gen(self, context: Context, target: str):
+        self.left.gen(context, target)
+        self.right.gen(context, target)
+
 
 class Print(Control):
     """Print a value.  Returns the value."""
@@ -333,6 +356,11 @@ class Print(Control):
         result = self.expr.eval()
         print(f"Quack!: {result.value}")
         return result
+
+    def gen(self, context: Context, target: str):
+        """We print by storing to the memory-mapped address 511"""
+        self.expr.gen(context, target)
+        context.add_line(f"   STORE  {target},r0,r0[511]")
 
 
 class Read(Expr):

@@ -110,5 +110,93 @@ class Test_Assign_Gen(AsmTestCase):
         self.codeEqual(generated, expected)
 
 
+class Test_Binops_Gen(AsmTestCase):
+    """A simple shakedown of each binary operation"""
+
+    def test_plus_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Plus(Var("x"), IntConst(3))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,var_x
+        LOAD r13,const_3
+        ADD  r14,r14,r13
+        const_3: DATA 3
+        var_x:   DATA 0
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+    def test_minus_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Minus(Var("x"), IntConst(3))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,var_x
+        LOAD r13,const_3
+        SUB  r14,r14,r13
+        const_3: DATA 3
+        var_x:   DATA 0
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+    def test_times_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Times(Var("x"), IntConst(3))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,var_x
+        LOAD r13,const_3
+        MUL  r14,r14,r13
+        const_3: DATA 3
+        var_x:   DATA 0
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+    def test_div_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Div(Var("x"), IntConst(3))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,var_x
+        LOAD r13,const_3
+        DIV  r14,r14,r13
+        const_3: DATA 3
+        var_x:   DATA 0
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+    def test_binop_combo(self):
+        """Combining the operations involves some register
+        management.
+        """
+        e = Plus(Times(Var("x"), Var("y")), Minus(IntConst(2), IntConst(3)))
+        context = Context()
+        target = context.allocate_register()
+        e.gen(context, target)
+        expected = """
+        LOAD r14,var_x
+        LOAD r13,var_y
+        MUL r14,r14,r13
+        LOAD r13,const_2
+        LOAD r12,const_3
+        SUB r13,r13,r12
+        ADD r14,r14,r13
+        const_2: DATA 2
+        const_3: DATA 3
+        var_x: DATA 0
+        var_y: DATA 0
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

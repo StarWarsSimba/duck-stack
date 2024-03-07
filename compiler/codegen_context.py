@@ -78,3 +78,16 @@ class Context(object):
         label = f"var_{name}"
         self.vars[name] = label
         return label
+
+    def allocate_register(self) -> str:
+        """Get the name of a register that is not otherwise
+        occupied. Keep exclusive access until it is returned with
+        free_register(reg).
+        """
+        return self.registers.pop()
+
+    def free_register(self, reg_name: str):
+        """Return the named register to the pool of
+        available registers.
+        """
+        self.registers.append(reg_name)
