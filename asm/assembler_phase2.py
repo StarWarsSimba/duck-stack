@@ -45,6 +45,7 @@ should be stored at this location, rather than
 a Duck Machine instruction.
 
 """
+
 import io
 
 import context
@@ -56,22 +57,25 @@ import sys
 import re
 
 import logging
+
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 # Configuration constants
-ERROR_LIMIT = 5    # Abandon assembly if we exceed this
+ERROR_LIMIT = 5  # Abandon assembly if we exceed this
+
 
 # Exceptions raised by this module
 class SyntaxError(Exception):
     pass
 
+
 ###
 # The whole instruction line is encoded as a single
 # regex with capture names for the parts we might
 # refer to. Error messages will be crappy (we'll only
-# know that the pattern didn't match, and not why), but 
+# know that the pattern didn't match, and not why), but
 # we get a very simple match/process cycle.  By creating
 # a dict containing the captured fields, we can determine
 # which optional parts are present (e.g., there could be
@@ -81,10 +85,17 @@ class SyntaxError(Exception):
 
 
 # To simplify client code, we'd like to return a dict with
-# the right fields even if the line is syntactically incorrect. 
-DICT_NO_MATCH = { 'label': None, 'opcode': None, 'predicate': None,
-                      'target': None, 'src1': None, 'src2': None,
-                      'offset': None, 'comment': None }
+# the right fields even if the line is syntactically incorrect.
+DICT_NO_MATCH = {
+    "label": None,
+    "opcode": None,
+    "predicate": None,
+    "target": None,
+    "src1": None,
+    "src2": None,
+    "offset": None,
+    "comment": None,
+}
 
 
 ###
@@ -93,11 +104,13 @@ DICT_NO_MATCH = { 'label': None, 'opcode': None, 'predicate': None,
 # can start with a label.
 ###
 
+
 class AsmSrcKind(Enum):
     """Distinguish which kind of assembly language instruction
     we have matched.  Each element of the enum corresponds to
     one of the regular expressions below.
     """
+
     # Blank or just a comment, optionally
     # with a label
     COMMENT = auto()
@@ -110,7 +123,8 @@ class AsmSrcKind(Enum):
 # Lines that contain only a comment (and possibly a label).
 # This includes blank lines and labels on a line by themselves.
 #
-ASM_COMMENT_PAT = re.compile(r"""
+ASM_COMMENT_PAT = re.compile(
+    r"""
    \s*
    # Optional label 
    (
@@ -122,11 +136,14 @@ ASM_COMMENT_PAT = re.compile(r"""
      (?P<comment>[\#;].*)
    )?       
    \s*$             
-   """, re.VERBOSE)
+   """,
+    re.VERBOSE,
+)
 
 # Instructions with fully specified fields. We can generate
 # code directly from these.
-ASM_FULL_PAT = re.compile(r"""
+ASM_FULL_PAT = re.compile(
+    r"""
    \s*
    # Optional label 
    (
@@ -147,14 +164,17 @@ ASM_FULL_PAT = re.compile(r"""
      (?P<comment>[\#;].*)
    )?       
    \s*$             
-   """, re.VERBOSE)
+   """,
+    re.VERBOSE,
+)
 
 # Defaults for values that ASM_FULL_PAT makes optional
-INSTR_DEFAULTS = [ ('predicate', 'ALWAYS'), ('offset', '0') ]
+INSTR_DEFAULTS = [("predicate", "ALWAYS"), ("offset", "0")]
 
 # A data word in memory; not a Duck Machine instruction
 #
-ASM_DATA_PAT = re.compile(r""" 
+ASM_DATA_PAT = re.compile(
+    r""" 
    \s* 
    # Optional label 
    (
@@ -173,17 +193,21 @@ ASM_DATA_PAT = re.compile(r"""
      (?P<comment>[\#;].*)
    )?       
    \s*$             
-   """, re.VERBOSE)
+   """,
+    re.VERBOSE,
+)
 
 
 # We will try each pattern in turn.  The PATTERNS table
 # is to associate each pattern with the kind of instruction
 # that each pattern matches.
 #
-PATTERNS = [(ASM_FULL_PAT, AsmSrcKind.FULL),
-            (ASM_DATA_PAT, AsmSrcKind.DATA),
-            (ASM_COMMENT_PAT, AsmSrcKind.COMMENT)
-            ]
+PATTERNS = [
+    (ASM_FULL_PAT, AsmSrcKind.FULL),
+    (ASM_DATA_PAT, AsmSrcKind.DATA),
+    (ASM_COMMENT_PAT, AsmSrcKind.COMMENT),
+]
+
 
 def parse_line(line: str) -> dict:
     """Parse one line of assembly code.
@@ -228,7 +252,7 @@ def to_flag(m: str) -> CondFlag:
     like Z or NEVER or might be a combination
     like PZ.
     """
-    if m in [ flag.name for flag in CondFlag ]:
+    if m in [flag for flag in CondFlag.__members__]:
         return CondFlag[m]
     composite = CondFlag.NEVER
     for bitname in m:
@@ -264,11 +288,11 @@ def assemble(lines: list[str]) -> list[int]:
         JUMP/Z  again           # cannot use pseudo-instruction JUMP or symbolic label 'again'
     """
     error_count = 0
-    instructions = [ ]
+    instructions = []
     for lnum in range(len(lines)):
         line = lines[lnum]
         log.debug(f"Processing line {lnum}: {line}")
-        try: 
+        try:
             fields = parse_line(line)
             if fields["kind"] == AsmSrcKind.FULL:
                 log.debug("Constructing instruction")
@@ -295,29 +319,38 @@ def assemble(lines: list[str]) -> list[int]:
             sys.exit(1)
     return instructions
 
+
 def cli() -> object:
     """Get arguments from command line"""
     parser = argparse.ArgumentParser(description="Duck Machine Assembler (pass 2)")
-    parser.add_argument("sourcefile", type=argparse.FileType('r'),
-                            nargs="?", default=sys.stdin,
-                            help="Duck Machine assembly code file")
-    parser.add_argument("objfile", type=argparse.FileType('w'),
-                            nargs="?", default=sys.stdout, 
-                            help="Object file output")
+    parser.add_argument(
+        "sourcefile",
+        type=argparse.FileType("r"),
+        nargs="?",
+        default=sys.stdin,
+        help="Duck Machine assembly code file",
+    )
+    parser.add_argument(
+        "objfile",
+        type=argparse.FileType("w"),
+        nargs="?",
+        default=sys.stdout,
+        help="Object file output",
+    )
     args = parser.parse_args()
     return args
 
 
 def main(sourcefile: io.IOBase, objfile: io.IOBase):
-    """"Assemble a Duck Machine program"""
+    """ "Assemble a Duck Machine program"""
     lines = sourcefile.readlines()
     object_code = assemble(lines)
     log.debug(f"Object code: \n{object_code}")
     for word in object_code:
         log.debug(f"Instruction word {word}")
-        print(word,file=objfile)
+        print(word, file=objfile)
+
 
 if __name__ == "__main__":
     args = cli()
     main(args.sourcefile, args.objfile)
-
