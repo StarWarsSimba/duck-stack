@@ -198,5 +198,38 @@ class Test_Binops_Gen(AsmTestCase):
         self.codeEqual(generated, expected)
 
 
+class Test_Unops_Gen(AsmTestCase):
+    """Unary operations Neg and Abs"""
+
+    def test_neg_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Neg(IntConst(8))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,const_8
+        SUB  r14,r0,r14 # Flip the sign 
+        const_8: DATA 8
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+    def test_abs_gen(self):
+        context = Context()
+        target = context.allocate_register()
+        e = Abs(IntConst(-3))
+        e.gen(context, target)
+        expected = """
+        LOAD r14,const_n_3
+        SUB  r0,r14,r0  # <Abs>
+        JUMP/PZ already_positive_1
+        SUB r14,r0,r14  # Flip the sign
+        already_positive_1:   # </Abs>
+        const_n_3:  DATA -3
+        """
+        generated = context.get_lines()
+        self.codeEqual(generated, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

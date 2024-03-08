@@ -225,6 +225,10 @@ class Neg(UnOp):
     def _apply(self, left: int) -> int:
         return 0 - left
 
+    def gen(self, context: Context, target: str):
+        self.left.gen(context, target)
+        context.add_line(f"    SUB {target},r0,{target}  # Flip the sign")
+
 
 class Abs(UnOp):
     """Absolute value, represented as @"""
@@ -235,6 +239,14 @@ class Abs(UnOp):
 
     def _apply(self, left: int) -> int:
         return abs(left)
+
+    def gen(self, context: Context, target: str):
+        self.left.gen(context, target)
+        pos = context.new_label("already_positive")
+        context.add_line(f"    SUB  r0,{target},r0  # <Abs>")
+        context.add_line(f"    JUMP/PZ {pos}")
+        context.add_line(f"    SUB {target},r0,{target}  # Flip the sign")
+        context.add_line(f"{pos}:   # </Abs>")
 
 
 class Var(Expr):
@@ -378,6 +390,9 @@ class Read(Expr):
     def eval(self) -> IntConst:
         val = input("Quack! Gimme an int! ")
         return IntConst(int(val))
+
+    def gen(self, context: Context, target: str):
+        context.add_line(f"   LOAD  {target},r0,r0[510]")
 
 
 class Comparison(Control):
